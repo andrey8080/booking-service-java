@@ -73,21 +73,22 @@ public class BookingService {
         Booking booking = bookingRepository.findById(id)
                 .orElseThrow(() -> new BusinessException("Бронирование с указанным id: '" + id + "' не найдено."));
 
-        LocalDate currentDate = LocalDate.from(dateTimeProvider.utcNow());
-        booking.cancel(currentDate);
-
-        bookingRepository.save(booking);
+        booking.beginCancellation(dateTimeProvider.utcNow());
 
         if (booking.getCatalogRequestId() != null) {
+            bookingRepository.save(booking);
             CancelBookingJobByRequestIdRequest command = new CancelBookingJobByRequestIdRequest(
                     UUID.randomUUID(),
                     booking.getCatalogRequestId()
             );
 
             bookingEventPublisher.publishCancelBookingJob(command);
+        } else {
+            booking.completeCancellation();
+            bookingRepository.save(booking);
         }
 
-        log.info("Отменено бронирование с ID: {}", id);
+        log.info("Запрошена отмена бронирования с ID: {}, статус={}", id, booking.getStatus());
     }
 
     // === ЗАПРОСЫ (Queries) ===
@@ -179,8 +180,11 @@ public class BookingService {
         log.info("Найдено бронирование: id={}, статус={}. Отменяем...",
                 booking.getId(), booking.getStatus());
 
-        LocalDate currentDate = LocalDate.from(dateTimeProvider.utcNow());
-        booking.cancel(currentDate);
+        if (booking.getStatus() == BookingStatus.CANCELLATION_PENDING) {
+            booking.completeCancellation();
+        } else {
+            booking.deny();
+        }
         bookingRepository.save(booking);
 
         log.info("Бронирование успешно отменено: id={}, новый статус={}",
@@ -195,5 +199,17 @@ public class BookingService {
     @Transactional
     public void handleError(UUID requestId) {
         log.info("Получено событие ошибки из DLQ: requestId={}", requestId);
+
+        Booking booking = bookingRepository.findByCatalogRequestId(requestId).orElse(null);
+        if (booking == null) {
+            log.warn("Бронирование не найдено по requestId: {}. Событие проигнорировано.", requestId);
+            return;
+        }
+
+        booking.rollbackCancellation();
+        bookingRepository.save(booking);
+
+        log.info("Восстановлен статус бронирования после ошибки отмены: id={}, статус={}",
+                booking.getId(), booking.getStatus());
     }
 }
