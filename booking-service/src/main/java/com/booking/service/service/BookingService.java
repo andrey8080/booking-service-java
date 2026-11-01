@@ -70,7 +70,7 @@ public class BookingService {
      * @param id идентификатор бронирования
      */
     public void cancelBooking(Long id) {
-        Booking booking = bookingRepository.findById(id)
+        Booking booking = bookingRepository.findByIdForUpdate(id)
                 .orElseThrow(() -> new BusinessException("Бронирование с указанным id: '" + id + "' не найдено."));
 
         booking.beginCancellation(dateTimeProvider.utcNow());
@@ -154,6 +154,9 @@ public class BookingService {
         log.info("Найдено бронирование: id={}, статус={}. Подтверждаем...",
                 booking.getId(), booking.getStatus());
 
+        if (booking.getStatus() == BookingStatus.CANCELLATION_PENDING) {
+            log.warn("Получено подтверждение во время отмены: id={}, requestId={}", booking.getId(), requestId);
+        }
         booking.confirm();
         bookingRepository.save(booking);
 

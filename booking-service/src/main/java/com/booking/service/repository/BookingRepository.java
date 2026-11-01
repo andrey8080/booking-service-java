@@ -3,9 +3,11 @@ package com.booking.service.repository;
 import com.booking.service.dto.response.ResourceBookingCount;
 import com.booking.service.entity.Booking;
 import com.booking.service.entity.BookingStatus;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -26,7 +28,14 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
      * @param catalogRequestId идентификатор запроса
      * @return Optional с бронированием или empty
      */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
     Optional<Booking> findByCatalogRequestId(UUID catalogRequestId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT b FROM Booking b WHERE b.id = :id")
+    Optional<Booking> findByIdForUpdate(@Param("id") Long id);
+
+    List<Booking> findByStatusAndCancellationRequestedAtBefore(BookingStatus status, OffsetDateTime requestedBefore);
 
     /**
      * Найти бронирования по фильтрам с пагинацией

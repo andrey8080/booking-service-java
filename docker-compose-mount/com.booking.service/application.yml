@@ -25,6 +25,9 @@ server:
 
 # Background Polling
 booking:
+  cancellation:
+    timeout: PT5M
+    retry-delay: PT1M
   background:
     polling:
       interval: 5000

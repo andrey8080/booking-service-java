@@ -93,14 +93,12 @@ public class Booking {
         this.catalogRequestId = catalogRequestId;
     }
 
-    /**
-     * Подтвердить бронирование (переход из AwaitConfirmation в Confirmed)
-     */
     public void confirm() {
-        if (status != BookingStatus.AWAIT_CONFIRMATION) {
-            throw new BusinessException("Статус заявки некорректен, заявка должна быть в статусе " + BookingStatus.AWAIT_CONFIRMATION);
+        if (status != BookingStatus.AWAIT_CONFIRMATION && status != BookingStatus.CANCELLATION_PENDING) {
+            throw new BusinessException("Некорректный статус для подтверждения бронирования");
         }
-        this.status = BookingStatus.CONFIRMED;
+        status = BookingStatus.CONFIRMED;
+        clearCancellation();
     }
 
     public void beginCancellation(OffsetDateTime requestedAt) {
