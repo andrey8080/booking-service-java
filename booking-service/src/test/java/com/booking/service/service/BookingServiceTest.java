@@ -52,7 +52,7 @@ class BookingServiceTest {
     @Test
     void startsCancellationAndPublishesCatalogCommand() {
         Booking booking = booking();
-        when(repository.findById(1L)).thenReturn(Optional.of(booking));
+        when(repository.findByIdForUpdate(1L)).thenReturn(Optional.of(booking));
         when(dateTimeProvider.utcNow()).thenReturn(NOW);
 
         service.cancelBooking(1L);
@@ -72,7 +72,7 @@ class BookingServiceTest {
     void completesCancellationLocallyWithoutCatalogRequest() {
         Booking booking = Booking.create(1L, 2L, NOW.toLocalDate().plusDays(1),
                 NOW.toLocalDate().plusDays(3), NOW);
-        when(repository.findById(1L)).thenReturn(Optional.of(booking));
+        when(repository.findByIdForUpdate(1L)).thenReturn(Optional.of(booking));
         when(dateTimeProvider.utcNow()).thenReturn(NOW);
 
         service.cancelBooking(1L);
@@ -156,7 +156,7 @@ class BookingServiceTest {
     void doesNotSendAnotherCommandForPendingCancellation() {
         Booking booking = booking();
         booking.beginCancellation(NOW);
-        when(repository.findById(1L)).thenReturn(Optional.of(booking));
+        when(repository.findByIdForUpdate(1L)).thenReturn(Optional.of(booking));
         when(dateTimeProvider.utcNow()).thenReturn(NOW.plusMinutes(1));
 
         assertThatThrownBy(() -> service.cancelBooking(1L)).isInstanceOf(BusinessException.class);
