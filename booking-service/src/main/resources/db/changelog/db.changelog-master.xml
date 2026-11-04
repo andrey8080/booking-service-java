@@ -59,4 +59,6 @@
         </rollback>
     </changeSet>
 
+    <include file="004-booking-history.xml" relativeToChangelogFile="true"/>
+
 </databaseChangeLog>

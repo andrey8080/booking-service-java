@@ -32,6 +32,7 @@ public class BookingService {
     private final BookingRepository bookingRepository;
     private final BookingEventPublisher bookingEventPublisher;
     private final CurrentDateTimeProvider dateTimeProvider;
+    private final BookingHistoryService bookingHistoryService;
 
     // === КОМАНДЫ (Use Cases) ===
 
@@ -48,6 +49,8 @@ public class BookingService {
         booking.setCatalogRequestId(requestId);
 
         booking = bookingRepository.save(booking);
+        bookingHistoryService.record(booking.getId(), null, booking.getStatus(),
+                "Создание бронирования", booking.getUserId().toString());
 
         CreateBookingJobRequest command = new CreateBookingJobRequest(
                 UUID.randomUUID(),
@@ -73,7 +76,10 @@ public class BookingService {
         Booking booking = bookingRepository.findByIdForUpdate(id)
                 .orElseThrow(() -> new BusinessException("Бронирование с указанным id: '" + id + "' не найдено."));
 
+        BookingStatus previousStatus = booking.getStatus();
         booking.beginCancellation(dateTimeProvider.utcNow());
+        bookingHistoryService.record(booking.getId(), previousStatus, booking.getStatus(),
+                "Запрос отмены бронирования", booking.getUserId().toString());
 
         if (booking.getCatalogRequestId() != null) {
             bookingRepository.save(booking);
@@ -86,6 +92,8 @@ public class BookingService {
         } else {
             booking.completeCancellation();
             bookingRepository.save(booking);
+            bookingHistoryService.record(booking.getId(), BookingStatus.CANCELLATION_PENDING, booking.getStatus(),
+                    "Отмена без запроса в каталог", booking.getUserId().toString());
         }
 
         log.info("Запрошена отмена бронирования с ID: {}, статус={}", id, booking.getStatus());
@@ -157,8 +165,11 @@ public class BookingService {
         if (booking.getStatus() == BookingStatus.CANCELLATION_PENDING) {
             log.warn("Получено подтверждение во время отмены: id={}, requestId={}", booking.getId(), requestId);
         }
+        BookingStatus previousStatus = booking.getStatus();
         booking.confirm();
         bookingRepository.save(booking);
+        bookingHistoryService.record(booking.getId(), previousStatus, booking.getStatus(),
+                "Подтверждение бронирования каталогом", "System");
 
         log.info("Бронирование успешно подтверждено: id={}, новый статус={}",
                 booking.getId(), booking.getStatus());
@@ -183,12 +194,16 @@ public class BookingService {
         log.info("Найдено бронирование: id={}, статус={}. Отменяем...",
                 booking.getId(), booking.getStatus());
 
+        BookingStatus previousStatus = booking.getStatus();
         if (booking.getStatus() == BookingStatus.CANCELLATION_PENDING) {
             booking.completeCancellation();
         } else {
             booking.deny();
         }
         bookingRepository.save(booking);
+        bookingHistoryService.record(booking.getId(), previousStatus, booking.getStatus(),
+                previousStatus == BookingStatus.CANCELLATION_PENDING
+                        ? "Отмена подтверждена каталогом" : "Бронирование отклонено каталогом", "System");
 
         log.info("Бронирование успешно отменено: id={}, новый статус={}",
                 booking.getId(), booking.getStatus());
@@ -209,8 +224,11 @@ public class BookingService {
             return;
         }
 
+        BookingStatus previousStatus = booking.getStatus();
         booking.rollbackCancellation();
         bookingRepository.save(booking);
+        bookingHistoryService.record(booking.getId(), previousStatus, booking.getStatus(),
+                "Откат отмены после ошибки каталога", "System");
 
         log.info("Восстановлен статус бронирования после ошибки отмены: id={}, статус={}",
                 booking.getId(), booking.getStatus());
