@@ -42,11 +42,14 @@ class BookingServiceTest {
     @Mock
     private CurrentDateTimeProvider dateTimeProvider;
 
+    @Mock
+    private BookingHistoryService historyService;
+
     private BookingService service;
 
     @BeforeEach
     void setUp() {
-        service = new BookingService(repository, publisher, dateTimeProvider);
+        service = new BookingService(repository, publisher, dateTimeProvider, historyService);
     }
 
     @Test
