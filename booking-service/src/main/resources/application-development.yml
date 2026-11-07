@@ -75,3 +75,4 @@ spring:
               binding-routing-key: 'error'
               # Не реплицируем ошибки повторно (уже в DLQ)
               republish-to-dlq: false
+              requeue-rejected: true

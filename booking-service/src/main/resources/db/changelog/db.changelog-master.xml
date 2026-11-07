@@ -61,4 +61,6 @@
 
     <include file="004-booking-history.xml" relativeToChangelogFile="true"/>
 
+    <include file="005-processed-events.xml" relativeToChangelogFile="true"/>
+
 </databaseChangeLog>

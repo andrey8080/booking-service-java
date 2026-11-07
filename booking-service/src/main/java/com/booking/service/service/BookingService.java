@@ -8,6 +8,7 @@ import com.booking.service.messaging.contracts.CancelBookingJobByRequestIdReques
 import com.booking.service.messaging.contracts.CreateBookingJobRequest;
 import com.booking.service.messaging.listener.BookingEventPublisher;
 import com.booking.service.repository.BookingRepository;
+import com.booking.service.repository.ProcessedEventRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
@@ -33,6 +34,7 @@ public class BookingService {
     private final BookingEventPublisher bookingEventPublisher;
     private final CurrentDateTimeProvider dateTimeProvider;
     private final BookingHistoryService bookingHistoryService;
+    private final ProcessedEventRepository processedEventRepository;
 
     // === КОМАНДЫ (Use Cases) ===
 
@@ -150,7 +152,10 @@ public class BookingService {
      * @param requestId идентификатор запроса
      */
     @Transactional
-    public void handleBookingJobConfirmed(UUID requestId) {
+    public void handleBookingJobConfirmed(UUID eventId, UUID requestId) {
+        if (!registerEvent(eventId)) {
+            return;
+        }
         log.info("Получено событие BookingJobConfirmed: requestId={}", requestId);
 
         Booking booking = bookingRepository.findByCatalogRequestId(requestId).orElse(null);
@@ -182,7 +187,10 @@ public class BookingService {
      * @param requestId идентификатор запроса
      */
     @Transactional
-    public void handleBookingJobDenied(UUID requestId) {
+    public void handleBookingJobDenied(UUID eventId, UUID requestId) {
+        if (!registerEvent(eventId)) {
+            return;
+        }
         log.info("Получено событие BookingJobDenied: requestId={}", requestId);
 
         Booking booking = bookingRepository.findByCatalogRequestId(requestId).orElse(null);
@@ -194,6 +202,10 @@ public class BookingService {
         log.info("Найдено бронирование: id={}, статус={}. Отменяем...",
                 booking.getId(), booking.getStatus());
 
+        if (booking.getStatus() == BookingStatus.CANCELLED) {
+            log.warn("Позднее отклонение проигнорировано: id={}, статус={}", booking.getId(), booking.getStatus());
+            return;
+        }
         BookingStatus previousStatus = booking.getStatus();
         if (booking.getStatus() == BookingStatus.CANCELLATION_PENDING) {
             booking.completeCancellation();
@@ -215,7 +227,10 @@ public class BookingService {
      * @param requestId идентификатор запроса
      */
     @Transactional
-    public void handleError(UUID requestId) {
+    public void handleError(UUID eventId, UUID requestId) {
+        if (!registerEvent(eventId)) {
+            return;
+        }
         log.info("Получено событие ошибки из DLQ: requestId={}", requestId);
 
         Booking booking = bookingRepository.findByCatalogRequestId(requestId).orElse(null);
@@ -224,6 +239,10 @@ public class BookingService {
             return;
         }
 
+        if (booking.getStatus() != BookingStatus.CANCELLATION_PENDING) {
+            log.warn("Поздняя ошибка отмены проигнорирована: id={}, статус={}", booking.getId(), booking.getStatus());
+            return;
+        }
         BookingStatus previousStatus = booking.getStatus();
         booking.rollbackCancellation();
         bookingRepository.save(booking);
@@ -232,5 +251,12 @@ public class BookingService {
 
         log.info("Восстановлен статус бронирования после ошибки отмены: id={}, статус={}",
                 booking.getId(), booking.getStatus());
+    }
+    private boolean registerEvent(UUID eventId) {
+        if (!processedEventRepository.register(eventId)) {
+            log.warn("Повторное событие пропущено: eventId={}", eventId);
+            return false;
+        }
+        return true;
     }
 }
