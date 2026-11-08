@@ -78,6 +78,7 @@ public class BookingEventListener {
                 }
             } catch (Exception e) {
                 log.error("Ошибка обработки DLQ сообщения: type={}, payload={}", messageType, payload, e);
+                throw new RuntimeException("Failed to process DLQ event: " + messageType, e);
             }
         };
     }
@@ -90,7 +91,7 @@ public class BookingEventListener {
         log.debug("BookingJobConfirmed: eventId={}, requestId={}",
                 event.getEventId(), event.getRequestId());
 
-        bookingService.handleBookingJobConfirmed(event.getRequestId());
+        bookingService.handleBookingJobConfirmed(event.getEventId(), event.getRequestId());
     }
 
     private void handleBookingJobDenied(String payload) throws Exception {
@@ -101,7 +102,7 @@ public class BookingEventListener {
         log.debug("BookingJobDenied: eventId={}, requestId={}",
                 event.getEventId(), event.getRequestId());
 
-        bookingService.handleBookingJobDenied(event.getRequestId());
+        bookingService.handleBookingJobDenied(event.getEventId(), event.getRequestId());
     }
 
     private void handleCancelBookingError(String payload) throws Exception {
@@ -112,7 +113,7 @@ public class BookingEventListener {
 
         log.debug("Команда отмены из DLQ: requestId={}", command.getRequestId());
 
-        bookingService.handleError(command.getRequestId());
+        bookingService.handleError(command.getEventId(), command.getRequestId());
     }
 
     /**

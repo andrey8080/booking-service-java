@@ -42,3 +42,8 @@ rabbitmq:
       # События (входящие от Catalog Service)
       booking-job-confirmed: BookingService.Catalog.Async.Api.Contracts.Events.BookingJobConfirmed, BookingService.Catalog.Async.Api.Contracts
       booking-job-denied: BookingService.Catalog.Async.Api.Contracts.Events.BookingJobDenied, BookingService.Catalog.Async.Api.Contracts
+
+booking:
+  cancellation:
+    timeout: PT5M
+    retry-delay: PT1M

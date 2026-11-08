@@ -44,6 +44,13 @@ public class Booking {
     @Column(name = "catalog_request_id")
     private UUID catalogRequestId;
 
+    @Enumerated(EnumType.ORDINAL)
+    @Column(name = "previous_status")
+    private BookingStatus previousStatus;
+
+    @Column(name = "cancellation_requested_at")
+    private OffsetDateTime cancellationRequestedAt;
+
     /**
      * Factory method для создания нового бронирования с валидацией бизнес-правил
      */
@@ -86,35 +93,57 @@ public class Booking {
         this.catalogRequestId = catalogRequestId;
     }
 
-    /**
-     * Подтвердить бронирование (переход из AwaitConfirmation в Confirmed)
-     */
     public void confirm() {
-        if (status != BookingStatus.AWAIT_CONFIRMATION) {
-            throw new BusinessException("Статус заявки некорректен, заявка должна быть в статусе " + BookingStatus.AWAIT_CONFIRMATION);
+        if (status != BookingStatus.AWAIT_CONFIRMATION && status != BookingStatus.CANCELLATION_PENDING) {
+            throw new BusinessException("Некорректный статус для подтверждения бронирования");
         }
-        this.status = BookingStatus.CONFIRMED;
+        status = BookingStatus.CONFIRMED;
+        clearCancellation();
     }
 
-    /**
-     * Отменить бронирование с учетом бизнес-правил
-     */
-    public void cancel(LocalDate currentDate) {
-        switch (status) {
-            case AWAIT_CONFIRMATION:
-                this.status = BookingStatus.CANCELLED;
-                break;
-            case CONFIRMED:
-                if (currentDate.isBefore(bookedFrom)) {
-                    this.status = BookingStatus.CANCELLED;
-                } else {
-                    throw new BusinessException("Невозможно отменить начавшееся бронирование");
-                }
-                break;
-            case NONE:
-            case CANCELLED:
-            default:
-                throw new BusinessException("Некорректный статус для отмены");
+    public void beginCancellation(OffsetDateTime requestedAt) {
+        if (requestedAt == null) {
+            throw new BusinessException("Время отправки команды отмены не указано");
         }
+        if (status != BookingStatus.AWAIT_CONFIRMATION && status != BookingStatus.CONFIRMED) {
+            throw new BusinessException("Некорректный статус для отмены");
+        }
+        if (status == BookingStatus.CONFIRMED && !requestedAt.toLocalDate().isBefore(bookedFrom)) {
+            throw new BusinessException("Невозможно отменить начавшееся бронирование");
+        }
+        previousStatus = status;
+        cancellationRequestedAt = requestedAt;
+        status = BookingStatus.CANCELLATION_PENDING;
+    }
+
+    public void completeCancellation() {
+        validatePendingCancellation();
+        status = BookingStatus.CANCELLED;
+        clearCancellation();
+    }
+
+    public void rollbackCancellation() {
+        validatePendingCancellation();
+        status = previousStatus;
+        clearCancellation();
+    }
+
+    public void deny() {
+        if (status != BookingStatus.AWAIT_CONFIRMATION) {
+            throw new BusinessException("Отклонить можно только бронирование, ожидающее подтверждения");
+        }
+        status = BookingStatus.CANCELLED;
+    }
+
+    private void validatePendingCancellation() {
+        if (status != BookingStatus.CANCELLATION_PENDING
+                || (previousStatus != BookingStatus.AWAIT_CONFIRMATION && previousStatus != BookingStatus.CONFIRMED)) {
+            throw new BusinessException("Бронирование не ожидает отмены");
+        }
+    }
+
+    private void clearCancellation() {
+        previousStatus = null;
+        cancellationRequestedAt = null;
     }
 }

@@ -46,4 +46,21 @@
         </createIndex>
     </changeSet>
 
+    <changeSet id="2" author="booking-service">
+        <addColumn tableName="bookings">
+            <column name="previous_status" type="INTEGER"/>
+            <column name="cancellation_requested_at" type="TIMESTAMP WITH TIME ZONE"/>
+        </addColumn>
+        <sql>ALTER TABLE bookings ADD CONSTRAINT chk_bookings_status CHECK (status IN (0, 1, 2, 3, 4))</sql>
+        <rollback>
+            <sql>ALTER TABLE bookings DROP CONSTRAINT chk_bookings_status</sql>
+            <dropColumn tableName="bookings" columnName="previous_status"/>
+            <dropColumn tableName="bookings" columnName="cancellation_requested_at"/>
+        </rollback>
+    </changeSet>
+
+    <include file="004-booking-history.xml" relativeToChangelogFile="true"/>
+
+    <include file="005-processed-events.xml" relativeToChangelogFile="true"/>
+
 </databaseChangeLog>
