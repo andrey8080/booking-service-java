@@ -1,5 +1,6 @@
 package com.booking.service.repository;
 
+import com.booking.service.dto.response.ResourceBookingCount;
 import com.booking.service.entity.Booking;
 import com.booking.service.entity.BookingStatus;
 import org.springframework.data.domain.Page;
@@ -9,6 +10,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -52,4 +54,25 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
      */
     @Query("SELECT b.status FROM Booking b WHERE b.id = :id")
     BookingStatus findStatusById(@Param("id") Long id);
+
+
+    @Query("SELECT COUNT(b) FROM Booking b WHERE b.createdAt >= :from AND b.createdAt < :toExclusive")
+    long countInPeriod(@Param("from") OffsetDateTime from, @Param("toExclusive") OffsetDateTime toExclusive);
+
+    @Query("SELECT b.status AS status, COUNT(b) AS bookingCount FROM Booking b " +
+           "WHERE b.createdAt >= :from AND b.createdAt < :toExclusive GROUP BY b.status")
+    List<StatusBookingCount> countByStatus(@Param("from") OffsetDateTime from,
+                                          @Param("toExclusive") OffsetDateTime toExclusive);
+
+    @Query("SELECT new com.booking.service.dto.response.ResourceBookingCount(b.resourceId, COUNT(b)) " +
+           "FROM Booking b WHERE b.createdAt >= :from AND b.createdAt < :toExclusive " +
+           "GROUP BY b.resourceId ORDER BY COUNT(b) DESC, b.resourceId ASC")
+    List<ResourceBookingCount> findTopResources(@Param("from") OffsetDateTime from,
+                                               @Param("toExclusive") OffsetDateTime toExclusive,
+                                               Pageable pageable);
+
+    interface StatusBookingCount {
+        BookingStatus getStatus();
+        long getBookingCount();
+    }
 }
