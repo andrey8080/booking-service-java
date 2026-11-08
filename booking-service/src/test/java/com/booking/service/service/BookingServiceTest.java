@@ -7,6 +7,7 @@ import com.booking.service.exception.BusinessException;
 import com.booking.service.messaging.contracts.CancelBookingJobByRequestIdRequest;
 import com.booking.service.messaging.listener.BookingEventPublisher;
 import com.booking.service.repository.BookingRepository;
+import com.booking.service.repository.ProcessedEventRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -22,6 +23,8 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -45,11 +48,16 @@ class BookingServiceTest {
     @Mock
     private BookingHistoryService historyService;
 
+    @Mock
+    private ProcessedEventRepository processedEventRepository;
+
     private BookingService service;
 
     @BeforeEach
     void setUp() {
-        service = new BookingService(repository, publisher, dateTimeProvider, historyService);
+        lenient().when(processedEventRepository.register(any()))
+                .thenReturn(true);
+        service = new BookingService(repository, publisher, dateTimeProvider, historyService, processedEventRepository);
     }
 
     @Test
@@ -95,7 +103,7 @@ class BookingServiceTest {
         booking.beginCancellation(NOW);
         when(repository.findByCatalogRequestId(REQUEST_ID)).thenReturn(Optional.of(booking));
 
-        service.handleError(REQUEST_ID);
+        service.handleError(UUID.randomUUID(), REQUEST_ID);
 
         assertThat(booking.getStatus()).isEqualTo(originalStatus);
         assertThat(booking.getPreviousStatus()).isNull();
@@ -110,7 +118,7 @@ class BookingServiceTest {
         booking.beginCancellation(NOW);
         when(repository.findByCatalogRequestId(REQUEST_ID)).thenReturn(Optional.of(booking));
 
-        service.handleBookingJobDenied(REQUEST_ID);
+        service.handleBookingJobDenied(UUID.randomUUID(), REQUEST_ID);
 
         assertThat(booking.getStatus()).isEqualTo(BookingStatus.CANCELLED);
         assertThat(booking.getPreviousStatus()).isNull();
@@ -124,7 +132,7 @@ class BookingServiceTest {
         Booking booking = booking();
         when(repository.findByCatalogRequestId(REQUEST_ID)).thenReturn(Optional.of(booking));
 
-        service.handleBookingJobDenied(REQUEST_ID);
+        service.handleBookingJobDenied(UUID.randomUUID(), REQUEST_ID);
 
         assertThat(booking.getStatus()).isEqualTo(BookingStatus.CANCELLED);
         assertThat(booking.getPreviousStatus()).isNull();
@@ -137,19 +145,19 @@ class BookingServiceTest {
     void ignoresUnknownRequestInErrorAndDenialHandlers() {
         when(repository.findByCatalogRequestId(REQUEST_ID)).thenReturn(Optional.empty());
 
-        service.handleError(REQUEST_ID);
-        service.handleBookingJobDenied(REQUEST_ID);
+        service.handleError(UUID.randomUUID(), REQUEST_ID);
+        service.handleBookingJobDenied(UUID.randomUUID(), REQUEST_ID);
 
         verifyNoInteractions(publisher);
     }
 
     @Test
-    void rejectsRollbackWhenNoCancellationIsPending() {
+    void ignoresLateCancellationErrorAfterConfirmation() {
         Booking booking = booking();
         booking.confirm();
         when(repository.findByCatalogRequestId(REQUEST_ID)).thenReturn(Optional.of(booking));
 
-        assertThatThrownBy(() -> service.handleError(REQUEST_ID)).isInstanceOf(BusinessException.class);
+        service.handleError(UUID.randomUUID(), REQUEST_ID);
 
         assertThat(booking.getStatus()).isEqualTo(BookingStatus.CONFIRMED);
         verify(repository, never()).save(booking);
